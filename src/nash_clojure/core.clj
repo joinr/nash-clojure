@@ -1,9 +1,10 @@
 (ns
   #^{:author "Josh Peterson"
      :doc "Functions used to categorize Nash solutions to two-player games"} 
-  nash-clojure.core (:gen-class))
-(use 'clojure.math.numeric-tower)
-(use '[clojure.tools.cli :only [cli]])
+  nash-clojure.core
+  (:gen-class)
+  (:require [clojure.math.numeric-tower :refer :all]
+            [clojure.tools.cli :refer [cli]]))
 
 ;
 ; Two player game strategy generation
@@ -38,11 +39,13 @@
   (apply vector-bit-or (map #(assoc (vec (repeat (* number-of-rows number-of-columns) 0)) % 1)
                              (one-indexes number-of-rows number-of-columns strategy-index))))
 
+;;very slow due to apply map vector...
 (defn column-rank-order
   "Apply the column rank order transformation (effectivel a transpose) to the given player
    agnostic strategy."
   [number-of-columns player-agnostic-strategy]
   (flatten (vec (apply map vector (partition number-of-columns player-agnostic-strategy)))))
+
 
 (defn player-one-strategy
   "Find the player 1 strategy for the given strategy index."
@@ -50,6 +53,7 @@
   (column-rank-order number-of-columns
                      (player-agnostic-strategy number-of-rows number-of-columns strategy-index)))
 
+;;slow from count ?
 (defn player-two-strategy
   "Find the player 2 strategy for the given strategy index."
   [number-of-rows number-of-columns strategy-index]
@@ -59,6 +63,7 @@
 ; Nash game categorization
 ;
 
+;;invoking count on sequences.  why count this when we are taking 2?
 (defn categorize-nash-solution
   "Categorize the Nash solutions for the given two player game."
   [player-one-strategy player-two-strategy]
@@ -77,20 +82,50 @@
   [number-of-rows number-of-columns]
   (* (expt number-of-rows number-of-columns) (expt number-of-columns number-of-rows)))
 
-(defn partition-nash-games
+(defn nash-game-partitions [entries-per-partition number-of-games]
+  (map #(conj [%] (+ % (- entries-per-partition 1)))
+       (filter #(and (>= (- number-of-games %) entries-per-partition)
+                     (= 0 (mod % entries-per-partition)))
+               (range number-of-games))))
+
+(defn nash-game-partitions [entries-per-partition number-of-games]
+  (for [n (->>(range number-of-games)
+              (filter #(and (>= (- number-of-games %) entries-per-partition)
+                            (= 0 (mod % entries-per-partition)))))]
+    [n (+ n (- entries-per-partition 1))]))
+
+;;not good.
+#_(defn partition-nash-games
   "Determine the start and end indices of each group of Nash games"
   [number-of-partitions number-of-games]
   (let [entries-per-partition (quot number-of-games number-of-partitions)
-        partitions (map #(conj [%] (+ % (- entries-per-partition 1)))
-                        (filter #(and (>= (- number-of-games %) entries-per-partition)
-                                      (= 0 (mod % entries-per-partition)))
-                                (range number-of-games)))]
+        ;;holds onto head of lazy sequence.
+        partitions ]
     (if (= 0 (rem number-of-games number-of-partitions))
-      partitions
+      (nash-game-partitions entries-per-partition number-of-games)
       (let [first-indices (take (- number-of-partitions 1) partitions)
             last-indices-start (nth (nth (take-last 1 partitions) 0) 0)
             new-last-indices (conj [] last-indices-start (- number-of-games 1))]
-       (apply concat (conj () (conj () new-last-indices) first-indices))))))
+        (apply concat (conj () (conj () new-last-indices) first-indices))))))
+
+
+(defn partition-indices
+  ([parts n]
+   (if (= parts 1)
+     [[0 n]]
+     (partition-indices parts 0 (dec n) (dec (quot n parts)))))
+  ([parts l r step]
+   (cond (> parts 1)
+         (let [lnext (+ l step)]
+           (lazy-seq
+            (cons [l lnext] (partition-indices (dec parts) (inc lnext) r step))))
+         (== parts 1)
+         [[l r]])))
+
+(defn partition-nash-games
+  "Determine the start and end indices of each group of Nash games"
+  [number-of-partitions number-of-games]
+  (partition-indices number-of-partitions number-of-games))
 
 (defn categorize-given-nash-games
   "Categorize the Nash solutions for games with the given games indoces."
@@ -98,6 +133,7 @@
   (frequencies (map #(categorize-nash-game number-of-rows number-of-columns %)
                     (range (nth start-and-end-indices 0) (+ (nth start-and-end-indices 1) 1)))))
 
+;;ok
 (defn categorize-nash-games
   "Categorize the Nash solutions for games of a given size, using the given number of paritions
    using one thread."
@@ -132,3 +168,10 @@
     
     (println (time (pcategorize-nash-games (:rows options) (:columns options) (:threads options)))))
   (System/exit 0))
+
+
+(comment
+  (defn test [& {:keys [n] :or {n 1}}]
+    (println (time (pcategorize-nash-games 5 5 n))))
+
+  )

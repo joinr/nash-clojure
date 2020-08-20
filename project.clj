@@ -3,4 +3,6 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :main nash-clojure.core
-  :dependencies [[org.clojure/clojure "1.4.0"], [org.clojure/math.numeric-tower "0.0.2"], [org.clojure/tools.cli "0.2.2"]])
+  :dependencies [[org.clojure/clojure "1.10.1"],
+                 [org.clojure/math.numeric-tower "0.0.4"],
+                 [org.clojure/tools.cli "0.2.2"]])
