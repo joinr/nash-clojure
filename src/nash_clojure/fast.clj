@@ -72,7 +72,8 @@
 
 
 
-;;Fast path.
+;;Fast path; just lame copy/paste and replacing existing
+;;functions with their -fast counterpart.
 
 (defn categorize-given-nash-games-fast
   "Categorize the Nash solutions for games with the given games indoces."
@@ -189,4 +190,20 @@
   ;; "Elapsed time: 3937.4671 msecs"
   ;; {0 2764880, 1 4581225, 2 2419520}
   ;; nil
+
+  (require '[tech.viz.vega :as vega])
+  (def times [18339.8527
+              9959.0236
+              7139.6892
+              5855.4898
+              5070.2283
+              4530.2396
+              4143.6082
+              3958.4207
+              3927.3654
+              3937.4671])
+  (-> (->> times
+           (map-indexed  (fn [idx t] {:threads idx :time-ms t})))
+       (vega/scatterplot :threads :time-ms)
+       (vega/vega->svg-file "samples.svg"))
   )
