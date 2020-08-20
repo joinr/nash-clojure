@@ -1,0 +1,39 @@
+* Nash solution search algorithm
+
+** joinr's notes
+This is an fork of the implementation of the Nash solution search algorithm described [here](http://joshpeterson.github.io/a-brief-introduction-to-nash-games/). It is written in Clojure.
+The original blog post was resubmitted to r/clojure circa 2020 (only 7 years :) ) and aligned with some recent scaling explorations I'd embarked on.
+
+After looking at the code, I went about optimizing with as little effort as possible, starting with memory usage, then runtime.
+
+*** memory 
+The primary memory hog was apparently a dangling lazy seq where the head was uninentionally retained while computing partitions for
+chunking the index space to do parallel runs.  
+
+The original implementation leveraged boxed data structures and boxed math extensively, creating a lot allactions and objects in 
+the process.  Normally this isn't a big deal (we're in FP and all...) but it didn't help.  Changing the solution representation 
+helped a bit in this regard (primitive arrays at the bottom), as did use of eduction / reduction / transducers and a minor bit of
+imperative loop stuff to eliminate intermediate collections.  Further strategies "could" be employed to remove allocation (e.g. 
+generate a pool of arrays that are thread-local and re-used, so space is O(1)), but it didn't appear to need that.
+
+Notably, when examining the actual heap usage via a profiler like visualVM, we see varitaions around 80-1000mb, with a steady state
+of around 2-300mb range toward the end runs.  I'm sure why there is so much spiking early on, but it's in line with
+typical memory-happy JVM GC applications.  
+*** CPU
+
+Using primitive math, eliminating wasteful seq operations, fusing operations together (e.g. mapping and computing and/or into a result), 
+and using primitive arrays (still copied though) helped substantially. The changes are fairly sparse (about 64 loc), likely with
+room for improvement (abeit additional refactoring).
+
+*** Performance / Scaling
+
+The implementation in the ~nash-clojure.fast~ namespace turns the crank about 117x faster than the legacy implementation on my machine.
+Like thet original author's intent, I also tested the scaling to see how it performed with additional threads.  Some variables to note
+are that we're still using ~pmap~, although the scaling seems to be in-line with what I have experienced in practical workloads of
+this sort (embracing the GC, not doing pure arithmetic everywhere).  I get decent scaling up to about 4x, much closer to linear scaling
+we the original implementation demonstrated.
+
+[[scaling.png][scaling]]
+* License
+
+This software is licensed under the [Boost Software License](http://www.boost.org/LICENSE_1_0.txt), per the original implementation.
