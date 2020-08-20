@@ -38,58 +38,28 @@
            (one-indexes-fast number-of-rows number-of-columns strategy-index)))
 
 ;;~57x faster
-(defn row-col-and [^longs row-major ^longs col-major rows cols]
-  (let [result     (long-array  (* ^long rows ^long cols))
-        n          (volatile! 0)]
-    (dotimes [i rows]
-      (dotimes [j cols]
-        (let [^long idx @n]
-          (aset result ^long idx ^long (bit-and (aget row-major (+ (* j rows) i))
-                                                (aget col-major idx)))
-          (vreset! n (unchecked-inc idx)))))
-    result))
-
-
-(defmacro dotimes-totaled
-  [bindings & body]
-  (assert (= (count bindings) 4) "expected 2 bindings!")
-  (let [[i n total k]   bindings]
-    `(let [n#     (long ~n)
-           total# (long ~k)]
-       (loop [~i 0
-              ~total total#]
-         (if (< ~i n#)
-           (let [new-total# (long ~@body)]
-             (recur (unchecked-inc ~i)  new-total#))
-           ~total)))))
-
-(defmacro dotimes-indexed
-  ([bindings idx body]
-   `(dotimes-indexed ~bindings ~idx 0 ~body))
-  ([bindings idx depth body]
-   (if (seq bindings)
-     (let [[l r] (take 2 bindings)]
-       `(dotimes-totaled [~l ~r ~idx ~(if (pos? depth) idx 0)]
-           (dotimes-indexed [~@(drop 2 bindings)] ~idx ~(inc depth) ~body)))
-     `(do ~body
-          (unchecked-inc ~idx)))))
-
-(defn row-col-and [^longs row-major ^longs col-major rows cols]
-  (let [result     (long-array  (* ^long rows ^long cols))
-        n          (volatile! 0)]
-    (dotimes [i rows]
-      (dotimes [j cols]
-        (let [^long idx @n]
-          (aset result ^long idx ^long (bit-and (aget row-major (+ (* j rows) i))
-                                                (aget col-major idx)))
-          (vreset! n (unchecked-inc idx)))))
-    result))
-
 #_(defn row-col-and [^longs row-major ^longs col-major rows cols]
-  (let [result     (long-array  (* ^long rows ^long cols))]
-    (dotimes-indexed [i 5 j 5] idx
-       (aset result idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
-                                       (aget col-major  idx))))
+  (let [result     (long-array  (* ^long rows ^long cols))
+        n          (volatile! 0)]
+    (dotimes [i rows]
+      (dotimes [j cols]
+        (let [^long idx @n]
+          (aset result ^long idx ^long (bit-and (aget row-major (+ (* j rows) i))
+                                                (aget col-major idx)))
+          (vreset! n (unchecked-inc idx)))))
+    result))
+
+;;funny, replacing the volatile with an array gets us 4.63x faster than
+;;volatile impl..
+(defn row-col-and [^longs row-major ^longs col-major rows cols]
+  (let [result     (long-array  (* ^long rows ^long cols))
+        n          (long-array 1 0)]
+    (dotimes [i rows]
+      (dotimes [j cols]
+        (let [idx (aget n 0)]
+          (aset result idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
+                                          (aget col-major idx)))
+          (aset n 0 (unchecked-inc idx)))))
     result))
 
 (defn categorize-nash-solution-fast
@@ -100,8 +70,6 @@
                              acc
                              (unchecked-inc acc)))
          (min 2)))) ;;replaces the old filter for 1's, take 2, count from before.
-
-(set! *unchecked-math* false)
 
 ;;about 100x faster.
 (defn categorize-nash-game-fast
@@ -142,6 +110,8 @@
     (into (sorted-map) (reduce #(merge-with + %1 %2)
                                (pmap #(categorize-given-nash-games-fast number-of-rows number-of-columns %)
                                      (core/partition-nash-games number-of-partitions number-of-games))))))
+
+(set! *unchecked-math* false)
 
 ;;took ~11 minutes wit 4 threads.
 (defn bench [& {:keys [rows cols n] :or {rows 5 cols 5 n 1}}]
@@ -247,4 +217,66 @@
            (map-indexed  (fn [idx t] {:threads idx :time-ms t})))
        (vega/scatterplot :threads :time-ms)
        (vega/vega->svg-file "samples.svg"))
+  )
+
+
+;;row-col experiments with storage..
+(comment
+  ;;original volatile impl us 269 ns
+  (defn row-col-and1 [^longs row-major ^longs col-major rows cols]
+    (let [result     (long-array  (* ^long rows ^long cols))
+          n          (volatile! 0)]
+      (dotimes [i rows]
+        (dotimes [j cols]
+          (let [^long idx @n]
+            (aset result ^long idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
+                                                  (aget col-major idx)))
+            (vreset! n (unchecked-inc idx)))))
+      result))
+
+  (defmacro dotimes-totaled
+    [bindings & body]
+    (assert (= (count bindings) 4) "expected 2 bindings!")
+    (let [[i n total k]   bindings]
+      `(let [n#     (long ~n)
+             total# (long ~k)]
+         (loop [~i 0
+                ~total total#]
+           (if (< ~i n#)
+             (let [new-total# (long ~@body)]
+               (recur (unchecked-inc ~i)  new-total#))
+             ~total)))))
+
+  (defmacro dotimes-indexed
+    ([bindings idx body]
+     `(dotimes-indexed ~bindings ~idx 0 ~body))
+    ([bindings idx depth body]
+     (if (seq bindings)
+       (let [[l r] (take 2 bindings)]
+         `(dotimes-totaled [~l ~r ~idx ~(if (pos? depth) idx 0)]
+                           (dotimes-indexed [~@(drop 2 bindings)] ~idx ~(inc depth) ~body)))
+       `(do ~body
+            (unchecked-inc ~idx)))))
+
+  ;;optimized volatile-less gets us 72 ns (3.73x faster)
+  (defn row-col-and2 [^longs row-major ^longs col-major rows cols]
+    (let [result     (long-array  (* ^long rows ^long cols))]
+      (dotimes-indexed [i 5 j 5] idx
+                       (aset result idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
+                                                       (aget col-major  idx))))
+      result))
+
+  ;;notably, direct method invocation on a hinted volatile doesn't help (maybe inlining)
+
+  ;;Storing the cached valued in a long array gets us 58 ns..lol.
+  (defn row-col-and [^longs row-major ^longs col-major rows cols]
+    (let [result     (long-array  (* ^long rows ^long cols))
+          n          (long-array 1 0)]
+      (dotimes [i rows]
+        (dotimes [j cols]
+          (let [idx (aget n 0)]
+            (aset result idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
+                                            (aget col-major idx)))
+            (aset n 0 (unchecked-inc idx)))))
+      result))
   )
