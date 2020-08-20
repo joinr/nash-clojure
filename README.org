@@ -1,8 +1,11 @@
 * Nash solution search algorithm
 
 ** joinr's notes
-This is an fork of the implementation of the Nash solution search algorithm described [here](http://joshpeterson.github.io/a-brief-introduction-to-nash-games/). It is written in Clojure.
-The original blog post was resubmitted to r/clojure circa 2020 (only 7 years :) ) and aligned with some recent scaling explorations I'd embarked on.
+This is an fork of the implementation of the Nash solution search algorithm
+described [[http://joshpeterson.github.io/a-brief-introduction-to-nash-games/][here]]. It is written in Clojure. 
+
+The original blog post was resubmitted to r/clojure circa 2020 (only 7 years :)
+) and aligned with some recent scaling explorations I'd embarked on.
 
 After looking at the code, I went about optimizing with as little effort as possible, starting with memory usage, then runtime.
 
@@ -33,7 +36,7 @@ are that we're still using ~pmap~, although the scaling seems to be in-line with
 this sort (embracing the GC, not doing pure arithmetic everywhere).  I get decent scaling up to about 4x, much closer to linear scaling
 we the original implementation demonstrated.
 
-[[scaling.png][scaling]]
+[[https://github.com/joinr/nash-clojure/blob/master/scaling.png][scaling]]
 * License
 
 This software is licensed under the [Boost Software License](http://www.boost.org/LICENSE_1_0.txt), per the original implementation.
