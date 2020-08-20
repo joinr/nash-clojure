@@ -49,6 +49,49 @@
           (vreset! n (unchecked-inc idx)))))
     result))
 
+
+(defmacro dotimes-totaled
+  [bindings & body]
+  (assert (= (count bindings) 4) "expected 2 bindings!")
+  (let [[i n total k]   bindings]
+    `(let [n#     (long ~n)
+           total# (long ~k)]
+       (loop [~i 0
+              ~total total#]
+         (if (< ~i n#)
+           (let [new-total# (long ~@body)]
+             (recur (unchecked-inc ~i)  new-total#))
+           ~total)))))
+
+(defmacro dotimes-indexed
+  ([bindings idx body]
+   `(dotimes-indexed ~bindings ~idx 0 ~body))
+  ([bindings idx depth body]
+   (if (seq bindings)
+     (let [[l r] (take 2 bindings)]
+       `(dotimes-totaled [~l ~r ~idx ~(if (pos? depth) idx 0)]
+           (dotimes-indexed [~@(drop 2 bindings)] ~idx ~(inc depth) ~body)))
+     `(do ~body
+          (unchecked-inc ~idx)))))
+
+(defn row-col-and [^longs row-major ^longs col-major rows cols]
+  (let [result     (long-array  (* ^long rows ^long cols))
+        n          (volatile! 0)]
+    (dotimes [i rows]
+      (dotimes [j cols]
+        (let [^long idx @n]
+          (aset result ^long idx ^long (bit-and (aget row-major (+ (* j rows) i))
+                                                (aget col-major idx)))
+          (vreset! n (unchecked-inc idx)))))
+    result))
+
+#_(defn row-col-and [^longs row-major ^longs col-major rows cols]
+  (let [result     (long-array  (* ^long rows ^long cols))]
+    (dotimes-indexed [i 5 j 5] idx
+       (aset result idx ^long (bit-and (aget row-major (+ (* j ^long rows) i))
+                                       (aget col-major  idx))))
+    result))
+
 (defn categorize-nash-solution-fast
   "Categorize the Nash solutions for the given two player game."
   [player-one-strategy player-two-strategy rows cols]
@@ -57,6 +100,8 @@
                              acc
                              (unchecked-inc acc)))
          (min 2)))) ;;replaces the old filter for 1's, take 2, count from before.
+
+(set! *unchecked-math* false)
 
 ;;about 100x faster.
 (defn categorize-nash-game-fast
@@ -97,9 +142,6 @@
     (into (sorted-map) (reduce #(merge-with + %1 %2)
                                (pmap #(categorize-given-nash-games-fast number-of-rows number-of-columns %)
                                      (core/partition-nash-games number-of-partitions number-of-games))))))
-
-
-(set! *unchecked-math* false)
 
 ;;took ~11 minutes wit 4 threads.
 (defn bench [& {:keys [rows cols n] :or {rows 5 cols 5 n 1}}]
