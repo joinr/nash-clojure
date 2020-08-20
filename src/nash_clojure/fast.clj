@@ -48,7 +48,6 @@
                                                 (aget col-major idx)))
           (vreset! n (unchecked-inc idx)))))
     result))
-(set! *unchecked-math* false)
 
 (defn categorize-nash-solution-fast
   "Categorize the Nash solutions for the given two player game."
